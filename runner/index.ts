@@ -69,30 +69,32 @@ async function executeCode(task: Task): Promise<string> {
 }
 
 async function executeAnalysis(task: Task): Promise<string> {
-  // 调用 LiteLLM 或直接调模型 API
-  const apiKey = process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY
-  const baseUrl = process.env.LITELLM_URL || 'https://api.openai.com/v1'
+  // 通过 git.sant.ltd 统一代理调用所有模型
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://git.sant.ltd'
+  const model = process.env.DEFAULT_MODEL || 'claude-sonnet-4-5'
   
-  if (!apiKey) return 'Error: No API key configured. Set OPENAI_API_KEY or LITELLM_URL'
+  if (!apiKey) return 'Error: No API key configured. Set ANTHROPIC_API_KEY'
   
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const res = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
-      model: process.env.DEFAULT_MODEL || 'gpt-4o',
+      model,
+      max_tokens: 4096,
       messages: [
-        { role: 'system', content: 'You are a helpful analyst. Respond in Chinese.' },
-        { role: 'user', content: `${task.title}\n\n${task.description}` }
+        { role: 'user', content: `${task.title}\n\n${task.description}\n\n请用中文回答。` }
       ]
     })
   })
   
-  if (!res.ok) return `API Error: ${res.status}`
+  if (!res.ok) return `API Error: ${res.status} ${await res.text()}`
   const data = await res.json()
-  return data.choices?.[0]?.message?.content || 'No response'
+  return data.content?.[0]?.text || 'No response'
 }
 
 async function executeAutomation(task: Task): Promise<string> {
