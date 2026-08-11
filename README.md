@@ -1,67 +1,70 @@
 # Agent Platform
 
-Mac 看板下发 → Windows 自动执行 → GitHub 归档
+Mac → Conductor (task.sant.ltd) → Windows 执行 → GitHub 归档
 
-## 架构
-
-```
-Mac (浏览器) → task.sant.ltd → Windows Task Runner
-                                ├── WorkIQ (M365 公司资料)
-                                ├── ai.sant.ltd (100+ 模型)
-                                ├── Azure CLI (云资源)
-                                └── GitHub (代码归档)
-```
-
-## 已验证通路
-
-| 通道 | 认证方式 | 能力 |
-|------|---------|------|
-| WorkIQ | Scout 缓存 AAD | 邮件/日历/Teams/OneDrive/SharePoint |
-| ai.sant.ltd | API Key | 文本/图片/语音/视频/嵌入 (100+ 模型) |
-| GitHub | gh CLI keyring | 仓库读写 |
-| Azure CLI | az login | 资源管理/部署 |
-| git.sant.ltd | 环境变量 | Anthropic 代理（备用） |
-
-## 可用模型 (ai.sant.ltd)
-
-**文本**: claude-opus-5, claude-sonnet-5, gpt-5.5, gpt-5.4, gemini-3.5-flash, DeepSeek-V4-Pro, Kimi-K2.6
-**图片**: gpt-image-2, FLUX.1-Kontext-pro, MAI-Image-2.5
-**语音**: whisper (STT), gpt-4o-mini-tts (TTS)
-**视频**: sora-2
-**代码**: gpt-5.3-codex, codex-mini
-**嵌入**: text-embedding-3-large/small
-
-## 目录结构
+## 实际架构
 
 ```
-├── task-app/              # task.sant.ltd (Next.js 看板)
-│   ├── app/page.tsx       # 看板 UI (todo/doing/done)
-│   ├── app/api/tasks/     # 任务 CRUD API
-│   └── package.json
-├── runner/                # Windows Task Runner
-│   ├── index.ts           # 轮询 + 路由 + 执行
-│   └── .env.example       # 环境变量模板
-├── docs/adrs/             # 架构决策记录
-└── README.md
+Mac (浏览器)
+  └── task.sant.ltd (Conductor v0.13.1)
+       ├── 看板 UI + 一句话下发
+       ├── 审批中心
+       ├── 策略治理
+       ├── SSE 实时事件流
+       └── 记忆系统
+            │
+            ▼
+       Windows Runner (yuhao-desktop)
+       ├── workiq_local  → M365 邮件/日历/Teams
+       ├── claude_local  → 分析/代码/Vault
+       ├── codex_local   → 代码/脚本/本地文件
+       ├── copilot_cloud → GitHub PR/重构/测试
+       └── litellm_worker → ai.sant.ltd 100+模型
+            │
+            ▼
+       GitHub (isaint/agent-platform)
+       └── 代码/specs/ADR 归档
 ```
 
-## 快速开始
+## Craft Agent 对接
+
+Craft Agent 同时对接所有通道：
+
+| Source | 用途 |
+|--------|------|
+| conductor (task.sant.ltd) | 下发/管理/审计任务 |
+| workiq (M365 Copilot) | 直查公司资料 |
+| litellm (ai.sant.ltd) | 直调 100+ 模型 |
+| github | 代码仓库读写 |
+
+## 已验证的 7 个能力
+
+| 能力 | 实现 |
+|------|------|
+| Memory | Conductor /memories API |
+| Scheduling | Conductor reconciler (30s 轮询) |
+| Event Trigger | Conductor /stream SSE + chains |
+| Agent Team | 6 执行器 (workiq/claude/codex/copilot/litellm) |
+| Audit | Conductor /stats + /usage + transcript |
+| Governance | Conductor /policies + /approvals + /permissions |
+| Long Running | Conductor chains + pause/resume/retry |
+
+## 快速下发
 
 ```bash
-# 1. 启动看板
-cd task-app && bun install && bun run dev
+# 通过 Craft Agent
+mcp__conductor__api_conductor POST /quick {"text":"总结今天邮件","auto_start":true}
 
-# 2. 启动 Runner (另一个终端)
-cd runner && bun run index.ts
+# 通过 curl
+curl -X POST https://task.sant.ltd/quick \
+  -H "Authorization: Bearer sk-cond-xxx" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"总结今天邮件","auto_start":true}'
 ```
 
-## 任务类型
+## 统计
 
-| type | 路由到 | 说明 |
-|------|--------|------|
-| company-data | WorkIQ (M365) | 邮件/文件/Teams/日历 |
-| code | GitHub | 代码实现/重构 → commit & push |
-| analysis | ai.sant.ltd | 推理/分析/总结/翻译 |
-| image | ai.sant.ltd | 图片生成 (gpt-image-2/FLUX) |
-| speech | ai.sant.ltd | TTS/STT |
-| automation | Shell/Azure CLI | 自动化脚本/云操作 |
+- 已完成: 26 任务
+- 失败: 4
+- 总花费: $0.09
+- Runner: yuhao-desktop (在线)

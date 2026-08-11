@@ -1,35 +1,45 @@
 # ADR-0001: 统一 Agent 平台架构
 
 ## 状态
-Accepted (2026-08-11 已验证)
-
-## 背景
-需要一个跨设备 AI 任务平台：Mac 下发任务 → Windows 执行 → GitHub 归档。
+Accepted (2026-08-11 全部验证通过)
 
 ## 决策
 
-### 1. 不需要独立 Scout 对接
-WorkIQ（Scout 内置的 M365 Copilot MCP）已作为 Craft Source 直接接入。
-通过 Scout 缓存的 AAD 认证，直接读取邮件/日历/Teams/OneDrive/SharePoint。
+### Conductor (task.sant.ltd) = 已有的控制面板
+不需要另建 task-app。task.sant.ltd 已运行 Conductor v0.13.1，具备：
+- 任务 CRUD + 一句话下发 (/quick)
+- 链式多步骤任务 (/chains)
+- 审批中心 (/approvals)
+- 策略治理 (/policies)
+- 记忆系统 (/memories)
+- SSE 实时事件 (/stream)
+- 执行器管理 (/runners)
+- 费用追踪 (/usage)
 
-### 2. 不需要独立 LiteLLM proxy
-ai.sant.ltd 已部署运行，100+ 模型统一接口（文本/图片/语音/视频/嵌入）。
-已验证：claude-opus-5, gpt-5.4, gpt-image-2, whisper, sora-2 等。
+### Craft Agent = Conductor 的对接入口
+Craft 同时连接 4 个 source：
+- conductor → 下发/管理任务
+- workiq → 直查 M365 公司资料
+- litellm → 直调 100+ 模型
+- github → 代码仓库
 
-### 3. 不需要 OMA（当前阶段）
-Craft Agent 自身能力（spawn_session + skills + call_llm）覆盖当前需求。
-复杂工程流程（PM→架构→实现→QA→Review）再引入 OMA。
+### 执行器 = 已注册的 6 个
+- workiq_local: M365 (邮件/日历/Teams/OneDrive)
+- claude_local: 分析/代码/本地文件/Vault
+- codex_local: 代码/脚本/本地文件
+- copilot_cloud: GitHub PR/重构/测试
+- litellm_worker: 研究/分类/总结 (ai.sant.ltd)
+- codex_cloud: 长时间代码任务 (离线)
 
-### 4. 不需要消息队列/Gateway
-Task Runner 轮询 task.sant.ltd API，30s 间隔，足够简单。
+### 不再需要的
+- ❌ 自建 task-app（Conductor 已有）
+- ❌ 自建 Task Runner（yuhao-desktop 已在跑）
+- ❌ 单独 LiteLLM proxy（ai.sant.ltd 已对接）
+- ❌ 单独 Scout 对接（WorkIQ MCP 已接入）
 
-### 5. 所有认证复用本机
-- Azure: `az login` 已有 session
-- GitHub: `gh auth` keyring
-- M365: Scout 缓存的 AAD token
-- 模型: ai.sant.ltd API key
-
-## 后果
-- 4 个组件，零额外基础设施
-- 所有认证零配置（复用本机已登录状态）
-- 可随时扩展（加 OMA、加 Azure Queue、加 SignalR）
+## 验证记录 (2026-08-11)
+- [x] Conductor API 连接正常
+- [x] WorkIQ 读邮件/日历成功
+- [x] ai.sant.ltd 文本/图片生成成功
+- [x] GitHub 仓库读写成功
+- [x] 一句话下发 → 自动路由 → 执行完成
