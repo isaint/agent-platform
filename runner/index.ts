@@ -69,12 +69,38 @@ async function executeCode(task: Task): Promise<string> {
 }
 
 async function executeAnalysis(task: Task): Promise<string> {
-  // 通过 git.sant.ltd 统一代理调用所有模型
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://git.sant.ltd'
+  // 优先用 ai.sant.ltd (LiteLLM proxy, OpenAI 兼容格式)
+  // 备用 git.sant.ltd (Anthropic 格式)
+  const litellmUrl = process.env.LITELLM_URL
+  const litellmKey = process.env.LITELLM_API_KEY
   const model = process.env.DEFAULT_MODEL || 'claude-sonnet-4-5'
   
-  if (!apiKey) return 'Error: No API key configured. Set ANTHROPIC_API_KEY'
+  if (litellmUrl && litellmKey) {
+    // ai.sant.ltd (OpenAI 兼容接口)
+    const res = await fetch(`${litellmUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${litellmKey}`
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        messages: [
+          { role: 'system', content: '用中文回答。' },
+          { role: 'user', content: `${task.title}\n\n${task.description}` }
+        ]
+      })
+    })
+    if (!res.ok) return `LiteLLM Error: ${res.status} ${await res.text()}`
+    const data = await res.json()
+    return data.choices?.[0]?.message?.content || 'No response'
+  }
+  
+  // Fallback: git.sant.ltd (Anthropic Messages API)
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  const baseUrl = process.env.ANTHROPIC_BASE_URL || 'https://git.sant.ltd'
+  if (!apiKey) return 'Error: No API key configured'
   
   const res = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
@@ -91,7 +117,6 @@ async function executeAnalysis(task: Task): Promise<string> {
       ]
     })
   })
-  
   if (!res.ok) return `API Error: ${res.status} ${await res.text()}`
   const data = await res.json()
   return data.content?.[0]?.text || 'No response'
